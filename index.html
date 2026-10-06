@@ -128,6 +128,91 @@
         // Nome do arquivo que está na raiz do repositório, junto com o index.html
         const ARQUIVO_PLANILHA = "CRE.xlsx";
 
+        // ===== ARMAZENAMENTO DO ANDAMENTO =====
+        // Deixe vazio para salvar só neste navegador (localStorage).
+        // Para compartilhar entre todos os computadores, preencha com a URL do
+        // Firebase Realtime Database, ex: "https://meu-projeto-default-rtdb.firebaseio.com"
+        const FIREBASE_URL = "https://antivirus-14696-default-rtdb.firebaseio.com/";
+        const LS_KEY = "painel_antivirus_status_v1";
+        const INTERVALO_SYNC_MS = 20000;
+
+        let statusSalvo = {};
+
+        function chave(sheetName, machineName) {
+            // Firebase não aceita . $ # [ ] / nas chaves
+            return (sheetName + "__" + machineName).replace(/[.$#\[\]\/]/g, "_");
+        }
+
+        function lerLocal() {
+            try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); }
+            catch (e) { return {}; }
+        }
+
+        function salvarLocal() {
+            try { localStorage.setItem(LS_KEY, JSON.stringify(statusSalvo)); }
+            catch (e) { console.error(e); }
+        }
+
+        async function lerRemoto() {
+            if (!FIREBASE_URL) return null;
+            try {
+                const r = await fetch(FIREBASE_URL.replace(/\/$/, "") + "/status.json");
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                return (await r.json()) || {};
+            } catch (e) {
+                console.error("Erro ao ler banco remoto:", e);
+                return null;
+            }
+        }
+
+        async function salvarRemoto(alteracoes) {
+            if (!FIREBASE_URL) return;
+            try {
+                // PATCH atualiza só as máquinas alteradas, sem apagar o que outras pessoas marcaram
+                await fetch(FIREBASE_URL.replace(/\/$/, "") + "/status.json", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(alteracoes)
+                });
+            } catch (e) {
+                console.error("Erro ao salvar no banco remoto:", e);
+            }
+        }
+
+        function registrarStatus(sheet, machines) {
+            const alteracoes = {};
+            machines.forEach(m => {
+                const k = chave(sheet.sheet_name, m.name);
+                const v = { w: !!m.winUpdated, a: !!m.antivirusInstalled };
+                statusSalvo[k] = v;
+                alteracoes[k] = v;
+            });
+            salvarLocal();
+            salvarRemoto(alteracoes);
+        }
+
+        function aplicarStatusSalvo() {
+            workbookData.forEach(sheet => {
+                sheet.machines.forEach(m => {
+                    const s = statusSalvo[chave(sheet.sheet_name, m.name)];
+                    if (s) {
+                        m.winUpdated = !!s.w;
+                        m.antivirusInstalled = !!s.a;
+                    }
+                });
+            });
+        }
+
+        async function sincronizarRemoto() {
+            const remoto = await lerRemoto();
+            if (remoto) {
+                Object.assign(statusSalvo, remoto);
+                salvarLocal();
+                aplicarStatusSalvo();
+                atualizarDashboard();
+            }
+        }
+
         document.addEventListener("DOMContentLoaded", () => {
             atualizarDashboard();
             carregarPlanilhaAutomatica();
@@ -145,7 +230,18 @@
 
                 if (parsedData.length > 0) {
                     workbookData = parsedData;
+
+                    // O que foi marcado no painel tem prioridade sobre o que está no CRE.xlsx
+                    statusSalvo = lerLocal();
+                    const remoto = await lerRemoto();
+                    if (remoto) {
+                        Object.assign(statusSalvo, remoto);
+                        salvarLocal();
+                    }
+                    aplicarStatusSalvo();
                     atualizarDashboard();
+
+                    if (FIREBASE_URL) setInterval(sincronizarRemoto, INTERVALO_SYNC_MS);
                 } else {
                     mostrarErroCarga("A planilha foi lida, mas nenhuma máquina foi encontrada.");
                 }
@@ -334,21 +430,27 @@
         }
 
         function toggleWin(sIdx, mIdx) {
-            workbookData[sIdx].machines[mIdx].winUpdated = !workbookData[sIdx].machines[mIdx].winUpdated;
+            const m = workbookData[sIdx].machines[mIdx];
+            m.winUpdated = !m.winUpdated;
+            registrarStatus(workbookData[sIdx], [m]);
             atualizarDashboard();
         }
 
         function toggleAv(sIdx, mIdx) {
-            workbookData[sIdx].machines[mIdx].antivirusInstalled = !workbookData[sIdx].machines[mIdx].antivirusInstalled;
+            const m = workbookData[sIdx].machines[mIdx];
+            m.antivirusInstalled = !m.antivirusInstalled;
+            registrarStatus(workbookData[sIdx], [m]);
             atualizarDashboard();
         }
 
         function marcarTudoAba(status) {
             if (activeSheetIndex !== null && workbookData[activeSheetIndex]) {
-                workbookData[activeSheetIndex].machines.forEach(m => {
+                const sheet = workbookData[activeSheetIndex];
+                sheet.machines.forEach(m => {
                     m.winUpdated = status;
                     m.antivirusInstalled = status;
                 });
+                registrarStatus(sheet, sheet.machines);
                 atualizarDashboard();
             }
         }
