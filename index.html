@@ -6,14 +6,14 @@
     <title>Painel de Gestão de Atualização - CREs</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SheetJS (Importação e Exportação Excel/CSV) -->
+    <!-- SheetJS (Leitura e Exportação Excel/CSV) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body class="bg-slate-100 min-h-screen p-6 font-sans">
 
     <div class="max-w-7xl mx-auto space-y-6">
         
-        <!-- Cabeçalho, Nome do Projeto, Importar e Exportar -->
+        <!-- Cabeçalho, Nome do Projeto e Exportar -->
         <div class="bg-white rounded-xl shadow-md p-6 flex flex-col lg:flex-row justify-between items-center gap-4">
             <div class="w-full lg:w-1/3">
                 <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Nome do Projeto / Planilha</label>
@@ -23,11 +23,6 @@
             
             <!-- Botões de Ação -->
             <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end">
-                <label class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md cursor-pointer transition flex items-center gap-2 whitespace-nowrap text-sm">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                    Importar Excel
-                    <input type="file" id="fileInput" class="hidden" accept=".xlsx, .xls, .csv" onchange="processarExcel(event)">
-                </label>
                 <button onclick="exportarExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md transition flex items-center gap-2 text-sm">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     Exportar Excel
@@ -130,72 +125,77 @@
         let workbookData = [];
         let activeSheetIndex = null;
 
+        // Nome do arquivo que está na raiz do repositório, junto com o index.html
+        const ARQUIVO_PLANILHA = "CRE.xlsx";
+
         document.addEventListener("DOMContentLoaded", () => {
             atualizarDashboard();
+            carregarPlanilhaAutomatica();
         });
 
-        function processarExcel(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+        async function carregarPlanilhaAutomatica() {
+            try {
+                // ?v= evita que o navegador/GitHub Pages sirva uma versão antiga em cache
+                const resp = await fetch(ARQUIVO_PLANILHA + "?v=" + Date.now());
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
 
-            const fileName = file.name.replace(/\.[^/.]+$/, "");
-            document.getElementById('projectName').value = fileName;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-
-                let parsedData = [];
-
-                workbook.SheetNames.forEach(sheetName => {
-                    const worksheet = workbook.Sheets[sheetName];
-                    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                    
-                    let machineObjects = [];
-                    
-                    rows.forEach(row => {
-                        if (Array.isArray(row) && row.length > 0) {
-                            let strName = row[0] ? String(row[0]).trim() : '';
-                            if (strName !== '' && !['host name', 'hostname', 'maquinas', 'máquinas', 'total', 'aba / local', 'nome da máquina'].includes(strName.toLowerCase())) {
-                                let winStatus = row[1] ? (String(row[1]).toLowerCase().includes('sim') || String(row[1]).toLowerCase().includes('ok') || String(row[1]).toLowerCase().includes('true')) : false;
-                                let avStatus = row[2] ? (String(row[2]).toLowerCase().includes('sim') || String(row[2]).toLowerCase().includes('ok') || String(row[2]).toLowerCase().includes('true')) : false;
-                                
-                                machineObjects.push({
-                                    name: strName,
-                                    winUpdated: winStatus,
-                                    antivirusInstalled: avStatus
-                                });
-                            }
-                        }
-                    });
-
-                    let uniqueMap = new Map();
-                    machineObjects.forEach(item => {
-                        if (!uniqueMap.has(item.name)) {
-                            uniqueMap.set(item.name, item);
-                        }
-                    });
-
-                    let uniqueMachines = Array.from(uniqueMap.values());
-
-                    if (uniqueMachines.length > 0) {
-                        parsedData.push({
-                            sheet_name: sheetName.trim(),
-                            machines: uniqueMachines
-                        });
-                    }
-                });
+                const buffer = await resp.arrayBuffer();
+                const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
+                const parsedData = extrairDadosWorkbook(workbook);
 
                 if (parsedData.length > 0) {
                     workbookData = parsedData;
                     atualizarDashboard();
-                    alert("Planilha " + fileName + " carregada e processada com sucesso!");
                 } else {
-                    alert("A planilha foi lida, mas nenhuma máquina foi encontrada.");
+                    mostrarErroCarga("A planilha foi lida, mas nenhuma máquina foi encontrada.");
                 }
-            };
-            reader.readAsArrayBuffer(file);
+            } catch (err) {
+                console.error(err);
+                mostrarErroCarga("Não foi possível carregar " + ARQUIVO_PLANILHA +
+                    ". Verifique se o arquivo está na raiz e se a página está sendo aberta via http(s), não por file://.");
+            }
+        }
+
+        function mostrarErroCarga(msg) {
+            document.getElementById('tableBody').innerHTML =
+                `<tr><td colspan="6" class="p-6 text-center text-red-500">${msg}</td></tr>`;
+        }
+
+        function extrairDadosWorkbook(workbook) {
+            let parsedData = [];
+
+            workbook.SheetNames.forEach(sheetName => {
+                const worksheet = workbook.Sheets[sheetName];
+                const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                let machineObjects = [];
+
+                rows.forEach(row => {
+                    if (Array.isArray(row) && row.length > 0) {
+                        let strName = row[0] ? String(row[0]).trim() : '';
+                        if (strName !== '' && !['host name', 'hostname', 'maquinas', 'máquinas', 'total', 'aba / local', 'nome da máquina'].includes(strName.toLowerCase())) {
+                            const ehSim = v => v ? ['sim', 'ok', 'true'].some(t => String(v).toLowerCase().includes(t)) : false;
+                            machineObjects.push({
+                                name: strName,
+                                winUpdated: ehSim(row[1]),
+                                antivirusInstalled: ehSim(row[2])
+                            });
+                        }
+                    }
+                });
+
+                let uniqueMap = new Map();
+                machineObjects.forEach(item => {
+                    if (!uniqueMap.has(item.name)) uniqueMap.set(item.name, item);
+                });
+
+                let uniqueMachines = Array.from(uniqueMap.values());
+                if (uniqueMachines.length > 0) {
+                    parsedData.push({ sheet_name: sheetName.trim(), machines: uniqueMachines });
+                }
+            });
+
+            return parsedData;
         }
 
         function atualizarDashboard() {
@@ -210,7 +210,7 @@
             const input = document.getElementById("searchInput").value.toLowerCase();
 
             if (workbookData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">Nenhuma informação carregada. Use o botão "Importar Excel" para carregar suas CREs.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">Carregando dados da planilha...</td></tr>`;
                 resetCards();
                 return;
             }
