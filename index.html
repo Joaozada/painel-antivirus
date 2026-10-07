@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="pt-BR">
 
@@ -112,6 +111,37 @@
                         class="bg-rs-amarelo hover:brightness-95 text-slate-900 font-semibold py-2.5 px-4 rounded-lg shadow-md transition flex items-center gap-2 text-sm whitespace-nowrap"
                     >
                         ☀️ Modo claro
+                    </button>
+
+
+                    <!-- ================================================= -->
+                    <!-- INSTALADORES ANTIVIRUS -->
+                    <!-- ================================================= -->
+
+                    <button
+                        type="button"
+                        onclick="abrirInstaladoresAntivirus()"
+                        class="bg-rs-verde hover:bg-rs-verde-escuro text-white font-semibold py-2.5 px-4 rounded-lg shadow-md transition flex items-center gap-2 text-sm whitespace-nowrap"
+                    >
+
+                        <!-- Ícone de download -->
+                        <svg
+                            class="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"
+                            >
+                            </path>
+                        </svg>
+
+                        Instaladores Antivirus Download
+
                     </button>
 
 
@@ -481,10 +511,6 @@
          * FIREBASE
          *
          * Este é o seu banco atual.
-         *
-         * Os dados serão armazenados em:
-         *
-         * https://antivirus-14696-default-rtdb.firebaseio.com/status
          */
 
         const FIREBASE_URL =
@@ -504,6 +530,26 @@
 
 
         let statusSalvo = {};
+
+
+
+        // ============================================================
+        // LINK DOS INSTALADORES
+        // ============================================================
+
+        const LINK_INSTALADORES_ANTIVIRUS =
+            "https://drive.google.com/drive/folders/1avmCyAZLWKR6KA-0InqDWU9RgxyPtgbM";
+
+
+        function abrirInstaladoresAntivirus() {
+
+            window.open(
+                LINK_INSTALADORES_ANTIVIRUS,
+                "_blank",
+                "noopener,noreferrer"
+            );
+
+        }
 
 
 
@@ -786,16 +832,8 @@
             });
 
 
-            /*
-             * Salva localmente como cache.
-             */
-
             salvarLocal();
 
-
-            /*
-             * Salva no Firebase.
-             */
 
             await salvarRemoto(
                 alteracoes
@@ -853,30 +891,11 @@
 
                 if (remoto) {
 
-                    /*
-                     * Firebase é a fonte oficial.
-                     */
-
                     statusSalvo = remoto;
-
-
-                    /*
-                     * Cache local.
-                     */
 
                     salvarLocal();
 
-
-                    /*
-                     * Aplica aos dados da planilha.
-                     */
-
                     aplicarStatusSalvo();
-
-
-                    /*
-                     * Atualiza a tela.
-                     */
 
                     atualizarDashboard();
                 }
@@ -986,28 +1005,13 @@
                         await lerRemoto();
 
 
-                    /*
-                     * Limpa completamente
-                     * o estado atual.
-                     */
-
                     statusSalvo = {};
-
-
-                    /*
-                     * Usa SOMENTE o Firebase
-                     * como estado oficial.
-                     */
 
                     Object.assign(
                         statusSalvo,
                         remoto
                     );
 
-
-                    /*
-                     * Cache local.
-                     */
 
                     salvarLocal();
 
@@ -1028,12 +1032,6 @@
                     );
 
 
-                    /*
-                     * Somente se o Firebase
-                     * estiver indisponível,
-                     * usa o cache local.
-                     */
-
                     statusSalvo =
                         lerLocal();
 
@@ -1048,12 +1046,7 @@
 
 
 
-                /*
-                 * Aplica o status.
-                 */
-
                 aplicarStatusSalvo();
-
 
                 atualizarDashboard();
 
@@ -1074,20 +1067,13 @@
                                     await lerRemoto();
 
 
-                                /*
-                                 * O Firebase continua
-                                 * sendo a fonte oficial.
-                                 */
-
                                 statusSalvo =
                                     remoto;
 
 
                                 salvarLocal();
 
-
                                 aplicarStatusSalvo();
-
 
                                 atualizarDashboard();
 
@@ -1877,10 +1863,6 @@
                 !m.winUpdated;
 
 
-            /*
-             * Atualiza a tela imediatamente.
-             */
-
             atualizarDashboard();
 
 
@@ -2282,4 +2264,3 @@
 
 </body>
 </html>
-```
